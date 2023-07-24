@@ -1,1 +1,1 @@
-# music-controler
+# music-controller
