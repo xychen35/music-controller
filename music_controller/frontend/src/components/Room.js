@@ -1,17 +1,52 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import React, { useState, Component, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { Grid, Button, Typography } from "@mui/material";
 import CreateRoomPage from "./CreateRoomPage";
+import MusicPlayer from "./MusicPlayer";
+
+// function withParams(Component) {
+//   return (props) => <Component {...props} params={useParams()} />;
+// }
 
 export default function Room(props) {
   const navigate = useNavigate();
+  const { roomCode } = useParams();
+
   const [votesToSkip, setVotesToSkip] = useState(2);
   const [guestCanPause, setGuestCanPause] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [spotifyAuthenticated, setSpotifyAuthenticated] = useState(false);
+  const [song, setSong] = useState({});
 
-  const { roomCode } = useParams();
+  const getRoomDetails = () => {
+    fetch("/api/get-room" + "?code=" + roomCode)
+      .then((response) => {
+        if (!response.ok) {
+          props.leaveRoomCallback();
+          navigate("/");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        setVotesToSkip(data.votes_to_skip);
+        setGuestCanPause(data.guest_can_pause);
+        setIsHost(data.is_host);
+      });
+    if (isHost) {
+      authenticateSpotify();
+    }
+  };
+
+  useEffect(() => {
+    getRoomDetails();
+
+    let interval = setInterval(getCurrentSong, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  });
 
   const authenticateSpotify = () => {
     fetch("/spotify/is-authenticated")
@@ -34,33 +69,24 @@ export default function Room(props) {
       });
   };
 
-  const getRoomDetails = () => {
-    fetch("/api/get-room" + "?code=" + roomCode)
+  const getCurrentSong = () => {
+    fetch("/spotify/current-song")
       .then((response) => {
         if (!response.ok) {
-          props.leaveRoomCallback;
-          navigate("/");
+          return {};
+        } else {
+          return response.json();
         }
-        return response.json();
       })
       .then((data) => {
-        setVotesToSkip(data.votes_to_skip);
-        setGuestCanPause(data.guest_can_pause);
-        setIsHost(data.is_host);
+        setSong(data);
       });
-    if (isHost) {
-      authenticateSpotify();
-    }
   };
-
-  useEffect(() => {
-    getRoomDetails();
-  });
 
   const leaveButtonPressed = () => {
     const requestOptions = {
       method: "POST",
-      header: { "content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
     };
     fetch("/api/leave-room", requestOptions).then((response) => {
       props.leaveRoomCallback();
@@ -68,18 +94,8 @@ export default function Room(props) {
     });
   };
 
-  const renderSettingsButton = () => {
-    return (
-      <Grid item xs={12}>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={() => setShowSettings(true)}
-        >
-          Settings
-        </Button>
-      </Grid>
-    );
+  const updateShowSettings = (value) => {
+    setShowSettings(value);
   };
 
   const renderSettings = () => {
@@ -92,17 +108,31 @@ export default function Room(props) {
             defGuestCanPause={guestCanPause}
             defRoomCode={roomCode}
             updateCallback={getRoomDetails}
-          />
+          ></CreateRoomPage>
         </Grid>
         <Grid item xs={12}>
           <Button
             variant="contained"
             color="secondary"
-            onClick={() => setShowSettings(false)}
+            onClick={() => updateShowSettings(false)}
           >
             Close
           </Button>
         </Grid>
+      </Grid>
+    );
+  };
+
+  const renderSettingsButton = () => {
+    return (
+      <Grid item xs={12} align="center">
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => updateShowSettings(true)}
+        >
+          Settings
+        </Button>
       </Grid>
     );
   };
@@ -114,24 +144,12 @@ export default function Room(props) {
   return (
     <Grid container spacing={1} align="center">
       <Grid item xs={12}>
-        <Typography variant="h6" component="h6">
-          {roomCode}
+        <Typography variant="h4" component="h4">
+          Room: {roomCode}
         </Typography>
       </Grid>
-      <Grid item xs={12}>
-        <Typography variant="h6" component="h6">
-          Votes: {votesToSkip}
-        </Typography>
-      </Grid>
-      <Grid item xs={12}>
-        <Typography variant="h6" component="h6">
-          Guest Can Pause: {guestCanPause.toString()}
-        </Typography>
-      </Grid>
-      <Grid item xs={12}>
-        <Typography variant="h6" component="h6">
-          Host: {isHost.toString()}
-        </Typography>
+      <Grid item xs={12} md={12}>
+        <MusicPlayer {...song} />
       </Grid>
       {isHost ? renderSettingsButton() : null}
       <Grid item xs={12}>
